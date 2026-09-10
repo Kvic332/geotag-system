@@ -1,0 +1,22 @@
+# Canonical dependency set for all three Lambdas (position_tracker,
+# geofence_manager, event_processor) plus backend/local_server.py.
+#
+# infra/template.yaml points every AWS::Serverless::Function's CodeUri at
+# this backend/ directory (not just its own subfolder) because
+# position_tracker and geofence_manager import event_processor.diffing
+# directly (see that module's docstring) — with a shared CodeUri, `sam
+# build` installs from THIS file, not the per-function copies. The
+# per-function backend/<name>/requirements.txt files are kept identical to
+# this one for local `pip install -r backend/<name>/requirements.txt`
+# convenience and to match the CLAUDE.md project-structure listing.
+#
+# Verified installing on Python 3.14.5 (Windows) in this environment,
+# including psycopg2-binary — SPEC-DECISIONS toolchain constraint about
+# checking this before falling back to psycopg3 is satisfied; no fallback
+# needed.
+
+aws-lambda-powertools==3.34.0
+boto3==1.43.91
+psycopg2-binary==2.9.12
+redis==8.1.0
+PyJWT[crypto]==2.13.0

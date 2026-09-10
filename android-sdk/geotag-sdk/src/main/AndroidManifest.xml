@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Library manifest for the GeoTag SDK.
+
+    No `package` attribute: AGP 8 takes the namespace from build.gradle.
+
+    Permissions declared here are merged into every consuming app. Requesting them at runtime
+    is deliberately the APP's job (see README) — the SDK only declares them and fails loudly
+    if they have not been granted.
+
+    ACCESS_BACKGROUND_LOCATION is intentionally NOT declared: it is a Play-Store-reviewed
+    permission and this SDK does not run a foreground service, so it could not be used
+    correctly anyway. An app that needs background tracking must declare it itself and host
+    the SDK inside its own foreground service.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <uses-feature
+        android:name="android.hardware.location.gps"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.location.network"
+        android:required="false" />
+
+</manifest>

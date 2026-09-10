@@ -1,0 +1,134 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  geotag-system — position_tracker, geofence_manager, event_processor Lambdas
+  behind a single API Gateway. Runtime is python3.11 per CLAUDE.md even
+  though local dev runs Python 3.14 (SPEC-DECISIONS toolchain constraints).
+
+  NOTE ON CodeUri: position_tracker and geofence_manager both import
+  event_processor.diffing directly (see backend/event_processor/diffing.py's
+  docstring for why — the POST /positions response must carry enter/exit
+  events synchronously, and locally there is no async AWS Location Service
+  trigger to produce them). To keep that import valid in a real deployment,
+  every function's CodeUri points at the whole backend/ directory rather
+  than its own subfolder, so all three functions' packages (plus shared/)
+  are present in every deployment artifact. `sam build` therefore installs
+  from backend/requirements.txt (the CodeUri root), not the per-function
+  copies — see that file's header comment. This has NOT been exercised with
+  `sam build`/`sam local` in this environment (no SAM CLI installed here,
+  per SPEC-DECISIONS) and should be validated before a real deploy.
+
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 15
+    MemorySize: 256
+    Environment:
+      Variables:
+        AWS_REGION: eu-west-1
+        AWS_LOCATION_COLLECTION: geotag-geofences
+        DATABASE_URL: !Ref DatabaseUrl
+        REDIS_HOST: !Ref RedisHost
+        REDIS_PORT: !Ref RedisPort
+        COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
+        COGNITO_CLIENT_ID: !Ref CognitoClientId
+        DEV_JWT_SECRET: !Ref DevJwtSecret
+        SNS_TOPIC_ARN: !Ref SnsTopicArn
+        ENVIRONMENT: !Ref EnvironmentName
+
+Parameters:
+  DatabaseUrl:
+    Type: String
+    NoEcho: true
+    Description: postgresql:// DSN. Supabase in production, local Postgres+PostGIS in dev.
+  RedisHost:
+    Type: String
+    Default: localhost
+  RedisPort:
+    Type: String
+    Default: "6379"
+  CognitoUserPoolId:
+    Type: String
+    Default: ""
+  CognitoClientId:
+    Type: String
+    Default: ""
+  DevJwtSecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: HS256 signing secret used only when EnvironmentName=local.
+  SnsTopicArn:
+    Type: String
+    Default: ""
+    Description: Empty means event notifications no-op (see notifications.py).
+  EnvironmentName:
+    Type: String
+    Default: local
+    AllowedValues: [local, production]
+
+Resources:
+  GeotagApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+
+  PositionTrackerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: geotag-position-tracker
+      CodeUri: ../backend/
+      Handler: position_tracker.handler.lambda_handler
+      Events:
+        PostPositions:
+          Type: Api
+          Properties: { RestApiId: !Ref GeotagApi, Path: /positions, Method: POST }
+        GetPositionsActive:
+          Type: Api
+          Properties: { RestApiId: !Ref GeotagApi, Path: /positions/active, Method: GET }
+        GetPositionHistory:
+          Type: Api
+          Properties: { RestApiId: !Ref GeotagApi, Path: /positions/{device_id}/history, Method: GET }
+        GetPosition:
+          Type: Api
+          Properties: { RestApiId: !Ref GeotagApi, Path: /positions/{device_id}, Method: GET }
+
+  GeofenceManagerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: geotag-geofence-manager
+      CodeUri: ../backend/
+      Handler: geofence_manager.handler.lambda_handler
+      Events:
+        ListGeofences:
+          Type: Api
+          Properties: { RestApiId: !Ref GeotagApi, Path: /geofences, Method: GET }
+        CreateGeofence:
+          Type: Api
+          Properties: { RestApiId: !Ref GeotagApi, Path: /geofences, Method: POST }
+        UpdateGeofence:
+          Type: Api
+          Properties: { RestApiId: !Ref GeotagApi, Path: /geofences/{id}, Method: PUT }
+        DeleteGeofence:
+          Type: Api
+          Properties: { RestApiId: !Ref GeotagApi, Path: /geofences/{id}, Method: DELETE }
+
+  EventProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: geotag-event-processor
+      CodeUri: ../backend/
+      Handler: event_processor.handler.lambda_handler
+      Events:
+        ListEvents:
+          Type: Api
+          Properties: { RestApiId: !Ref GeotagApi, Path: /events, Method: GET }
+
+Outputs:
+  ApiUrl:
+    Description: Base URL for the deployed API (prod stage)
+    Value: !Sub "https://${GeotagApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
