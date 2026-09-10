@@ -1,0 +1,9 @@
+# The root .gitignore ignores ".env.*" (with an exception only for ".env.example").
+# Rules in a nested .gitignore take precedence over the parent's, so re-include the
+# example env file here — it is a template and contains no secrets.
+!.env.local.example
+
+# Real env files stay ignored (belt and braces alongside the root rules).
+.env
+.env.local
+.env.*.local

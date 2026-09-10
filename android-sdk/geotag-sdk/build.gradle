@@ -1,0 +1,64 @@
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+    id 'maven-publish'
+}
+
+android {
+    namespace 'com.geotag.sdk'
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 24
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+        }
+    }
+}
+
+dependencies {
+    // Exposed on the public API surface (Flow<Location>, suspend functions), so `api` not
+    // `implementation`.
+    api "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+
+    implementation "com.google.android.gms:play-services-location:21.3.0"
+    implementation "androidx.core:core-ktx:1.13.1"
+    implementation "androidx.annotation:annotation:1.8.0"
+
+    // JSON is org.json, which ships with the Android platform — no dependency needed.
+    // HTTP is java.net.HttpURLConnection — deliberately no OkHttp/Retrofit/Gson, so the SDK
+    // adds nothing to a consumer app's dependency graph that it does not already have.
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId = 'com.geotag'
+                artifactId = 'geotag-sdk'
+                version = '0.1.0'
+            }
+        }
+    }
+}
