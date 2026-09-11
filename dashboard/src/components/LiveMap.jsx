@@ -13,28 +13,25 @@ const TILE_ATTRIBUTION = '&copy; OpenStreetMap contributors';
 const FALLBACK_CENTER = [6.5244, 3.3792];
 const FALLBACK_ZOOM = 12;
 
-// Reverse-geocoding via Nominatim (free, no key). Cache by truncated coord so small
+// Reverse-geocoding via Google Geocoding API. Cache by truncated coord so small
 // GPS drift doesn't trigger duplicate requests.
 const geocodeCache = new Map();
+const GOOGLE_GEOCODING_KEY = import.meta.env.VITE_GOOGLE_GEOCODING_KEY;
 
 async function reverseGeocode(lat, lng) {
-  const key = `${Number(lat).toFixed(4)},${Number(lng).toFixed(4)}`;
-  if (geocodeCache.has(key)) return geocodeCache.get(key);
+  const cacheKey = `${Number(lat).toFixed(4)},${Number(lng).toFixed(4)}`;
+  if (geocodeCache.has(cacheKey)) return geocodeCache.get(cacheKey);
+  if (!GOOGLE_GEOCODING_KEY) return null;
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en`,
-      { headers: { 'User-Agent': 'GeoTag-Dashboard/1.0' } }
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_GEOCODING_KEY}`
     );
     const data = await res.json();
-    // Use the first 4 comma-separated parts of display_name — this reliably
-    // gives "Festac Town, Amuwo Odofin, Lagos, Nigeria" for sparse-OSM areas.
-    const address = data.display_name
-      ? data.display_name.split(',').slice(0, 4).map(s => s.trim()).join(', ')
-      : null;
-    geocodeCache.set(key, address);
+    const address = data.results?.[0]?.formatted_address ?? null;
+    geocodeCache.set(cacheKey, address);
     return address;
   } catch {
-    geocodeCache.set(key, null);
+    geocodeCache.set(cacheKey, null);
     return null;
   }
 }
