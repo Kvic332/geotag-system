@@ -13,21 +13,21 @@ const TILE_ATTRIBUTION = '&copy; OpenStreetMap contributors';
 const FALLBACK_CENTER = [6.5244, 3.3792];
 const FALLBACK_ZOOM = 12;
 
-// Reverse-geocoding via Google Geocoding API. Cache by truncated coord so small
-// GPS drift doesn't trigger duplicate requests.
+// Reverse-geocoding via OpenCage API. Free tier: 2,500 req/day, no billing required.
+// Cache by truncated coord so small GPS drift doesn't trigger duplicate requests.
 const geocodeCache = new Map();
-const GOOGLE_GEOCODING_KEY = import.meta.env.VITE_GOOGLE_GEOCODING_KEY;
+const OPENCAGE_KEY = import.meta.env.VITE_OPENCAGE_KEY;
 
 async function reverseGeocode(lat, lng) {
   const cacheKey = `${Number(lat).toFixed(4)},${Number(lng).toFixed(4)}`;
   if (geocodeCache.has(cacheKey)) return geocodeCache.get(cacheKey);
-  if (!GOOGLE_GEOCODING_KEY) return null;
+  if (!OPENCAGE_KEY) return null;
   try {
     const res = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_GEOCODING_KEY}`
+      `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${OPENCAGE_KEY}&limit=1&no_annotations=1`
     );
     const data = await res.json();
-    const address = data.results?.[0]?.formatted_address ?? null;
+    const address = data.results?.[0]?.formatted ?? null;
     geocodeCache.set(cacheKey, address);
     return address;
   } catch {
