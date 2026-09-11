@@ -26,19 +26,11 @@ async function reverseGeocode(lat, lng) {
       { headers: { 'User-Agent': 'GeoTag-Dashboard/1.0' } }
     );
     const data = await res.json();
-    const a = data.address ?? {};
-    // Build from structured fields first; fall back to the first 4 tokens
-    // of display_name so sparse-OSM areas (e.g. Lagos suburbs) still show
-    // something useful like "Festac Town, Amuwo Odofin, Lagos".
-    const structured = [
-      a.road || a.pedestrian || a.footway || a.path,
-      a.suburb || a.neighbourhood || a.quarter || a.village,
-      a.city_district || a.county,
-      a.city || a.town || a.state,
-    ].filter(Boolean);
-    const address = structured.length >= 2
-      ? structured.join(', ')
-      : (data.display_name ? data.display_name.split(',').slice(0, 4).join(',').trim() : null);
+    // Use the first 4 comma-separated parts of display_name — this reliably
+    // gives "Festac Town, Amuwo Odofin, Lagos, Nigeria" for sparse-OSM areas.
+    const address = data.display_name
+      ? data.display_name.split(',').slice(0, 4).map(s => s.trim()).join(', ')
+      : null;
     geocodeCache.set(key, address);
     return address;
   } catch {
