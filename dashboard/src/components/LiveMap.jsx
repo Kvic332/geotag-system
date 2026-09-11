@@ -13,6 +13,34 @@ const TILE_ATTRIBUTION = '&copy; OpenStreetMap contributors';
 const FALLBACK_CENTER = [6.5244, 3.3792];
 const FALLBACK_ZOOM = 12;
 
+// Reverse-geocoding via Nominatim (free, no key). Cache by truncated coord so small
+// GPS drift doesn't trigger duplicate requests.
+const geocodeCache = new Map();
+
+async function reverseGeocode(lat, lng) {
+  const key = `${Number(lat).toFixed(4)},${Number(lng).toFixed(4)}`;
+  if (geocodeCache.has(key)) return geocodeCache.get(key);
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en`,
+      { headers: { 'User-Agent': 'GeoTag-Dashboard/1.0' } }
+    );
+    const data = await res.json();
+    const a = data.address ?? {};
+    const parts = [
+      a.road || a.pedestrian || a.footway || a.path,
+      a.suburb || a.neighbourhood || a.quarter || a.village,
+      a.city || a.town || a.county,
+    ].filter(Boolean);
+    const address = parts.length ? parts.join(', ') : (data.display_name ?? null);
+    geocodeCache.set(key, address);
+    return address;
+  } catch {
+    geocodeCache.set(key, null);
+    return null;
+  }
+}
+
 /**
  * Live map: one marker per active device, geofence zones as overlays
  * (polygons AND circles, per SPEC-DECISIONS D2), plus the history trail of the
@@ -145,7 +173,16 @@ export default function LiveMap({
         marker.addTo(layer);
         markersRef.current.set(device.device_id, marker);
       }
-      marker.bindTooltip(deviceTooltip(device), { direction: 'top', offset: [0, -12] });
+      const cacheKey = `${Number(device.lat).toFixed(4)},${Number(device.lng).toFixed(4)}`;
+      marker.bindTooltip(deviceTooltip(device, geocodeCache.get(cacheKey) ?? null), { direction: 'top', offset: [0, -12] });
+
+      if (!geocodeCache.has(cacheKey)) {
+        reverseGeocode(device.lat, device.lng).then((address) => {
+          const m = markersRef.current.get(device.device_id);
+          if (m) m.setTooltipContent(deviceTooltip(device, address));
+        });
+      }
+
       marker.setZIndexOffset(selected ? 1000 : 0);
     });
 
@@ -261,14 +298,16 @@ function escapeHtml(value) {
   });
 }
 
-function deviceTooltip(device) {
+function deviceTooltip(device, address = null) {
   const battery = device.battery === null || device.battery === undefined ? '—' : `${device.battery}%`;
-  return [
+  const lines = [
     `<strong>${escapeHtml(device.device_id)}</strong>`,
     `battery ${escapeHtml(battery)}`,
     `seen ${escapeHtml(relativeTime(device.recorded_at))}`,
     `${formatCoord(device.lat)}, ${formatCoord(device.lng)}`,
-  ].join('<br/>');
+  ];
+  if (address) lines.push(`<span style="color:#555;font-style:italic">${escapeHtml(address)}</span>`);
+  return lines.join('<br/>');
 }
 
 function zoneTooltip(zone) {
