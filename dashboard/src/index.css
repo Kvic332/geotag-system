@@ -896,3 +896,175 @@ code {
   font: inherit;
   font-size: 11.5px;
 }
+
+/* ---------- score pills (used in integrity header) ---------- */
+
+.pill--ok {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.pill--warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.pill--fail {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* ---------- integrity panel ---------- */
+
+.integrity-shield {
+  font-style: normal;
+  margin-right: 2px;
+  opacity: 0.6;
+}
+
+.integrity-summary {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.integrity-summary--ok {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.integrity-summary--warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.integrity-summary--fail {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.integrity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.integrity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+}
+
+.integrity-item--pass {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.integrity-item--warn {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.integrity-item--fail {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.integrity-item--unknown {
+  background: #f8fafc;
+  border-color: var(--line);
+}
+
+.integrity-icon {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  margin-top: 1px;
+}
+
+.integrity-icon--pass {
+  background: var(--ok);
+  color: #fff;
+}
+
+.integrity-icon--warn {
+  background: var(--warn);
+  color: #fff;
+}
+
+.integrity-icon--fail {
+  background: var(--danger);
+  color: #fff;
+}
+
+.integrity-icon--unknown {
+  background: var(--ink-faint);
+  color: #fff;
+}
+
+.integrity-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.integrity-name {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--ink);
+  line-height: 1.3;
+}
+
+.integrity-detail {
+  font-size: 11px;
+  color: var(--ink-soft);
+  line-height: 1.35;
+}
+
+.integrity-badge {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.integrity-badge--pass {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.integrity-badge--warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.integrity-badge--fail {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.integrity-badge--unknown {
+  background: #f1f5f9;
+  color: var(--ink-faint);
+}

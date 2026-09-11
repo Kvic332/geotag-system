@@ -215,7 +215,8 @@ export const fixtureApi = {
         speed: Number((3 + Math.sin(t * 9) * 2).toFixed(2)),
         bearing: Number(((t * 360) % 360).toFixed(1)),
         battery: Math.min(100, device.battery + i),
-        recorded_at: iso(Date.now() - i * 90000),
+        // ±12 s jitter so the clock-integrity check sees natural variance
+        recorded_at: iso(Date.now() - i * 90000 + Math.round((Math.random() - 0.5) * 24000)),
       });
     }
     return { device_id: deviceId, count: positions.length, positions };
