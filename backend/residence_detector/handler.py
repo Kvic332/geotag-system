@@ -30,6 +30,8 @@ from shared.responses import api_handler, json_response
 logger = logging.getLogger(__name__)
 router = Router()
 
+# WAT = UTC+1. Night = 22:00–06:00 WAT = 21:00–05:00 UTC.
+# Using recorded_at + interval '1 hour' avoids needing the timezone database.
 _SQL = """
 WITH clustered AS (
     SELECT
@@ -38,26 +40,26 @@ WITH clustered AS (
         recorded_at
     FROM positions
     WHERE
-        tenant_id = %(tenant_id)s
-        AND device_id = %(device_id)s
+        tenant_id = %s
+        AND device_id = %s
         AND recorded_at >= NOW() - INTERVAL '14 days'
         AND (
-            EXTRACT(HOUR FROM recorded_at AT TIME ZONE 'Africa/Lagos') >= 22
-            OR EXTRACT(HOUR FROM recorded_at AT TIME ZONE 'Africa/Lagos') < 6
+            EXTRACT(HOUR FROM (recorded_at + INTERVAL '1 hour')) >= 22
+            OR EXTRACT(HOUR FROM (recorded_at + INTERVAL '1 hour')) < 6
         )
 ),
 totals AS (
     SELECT
         cluster_lat,
         cluster_lng,
-        COUNT(*)                                                          AS night_pings,
-        COUNT(DISTINCT DATE(recorded_at AT TIME ZONE 'Africa/Lagos'))    AS active_nights
+        COUNT(*) AS night_pings,
+        COUNT(DISTINCT DATE(recorded_at + INTERVAL '1 hour')) AS active_nights
     FROM clustered
     GROUP BY cluster_lat, cluster_lng
 ),
 total_count AS (SELECT SUM(night_pings) AS total_night_pings FROM totals),
 total_days  AS (
-    SELECT COUNT(DISTINCT DATE(recorded_at AT TIME ZONE 'Africa/Lagos')) AS days_analyzed
+    SELECT COUNT(DISTINCT DATE(recorded_at + INTERVAL '1 hour')) AS days_analyzed
     FROM clustered
 )
 SELECT
@@ -78,7 +80,7 @@ def get_residence(event, _context):
     auth = require_auth(event)
     device_id = (event.get("pathParameters") or {}).get("device_id", "")
 
-    row = query_one(_SQL, {"tenant_id": auth.tenant_id, "device_id": device_id})
+    row = query_one(_SQL, (auth.tenant_id, device_id))
 
     if row is None:
         return json_response(404, {"error": {
