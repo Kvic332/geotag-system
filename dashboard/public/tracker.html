@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GeoTag Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --bg:        #0A0E1A;
+    --surface:   #141926;
+    --surface2:  #1C2233;
+    --border:    #252D42;
+    --text:      #E2E8F4;
+    --muted:     #4B5675;
+    --accent:    #0EA5E9;
+    --accent-dim:#0369A1;
+    --green:     #22C55E;
+    --green-dim: #15803D;
+    --red:       #EF4444;
+    --amber:     #F59E0B;
+    --mono:      'JetBrains Mono', monospace;
+    --sans:      'Inter', system-ui, sans-serif;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg:       #F0F4FA;
+      --surface:  #FFFFFF;
+      --surface2: #EEF2FB;
+      --border:   #D1D9EC;
+      --text:     #0D1526;
+      --muted:    #6B7A9E;
+      --accent:   #0284C7;
+      --accent-dim:#0369A1;
+    }
+  }
+
+  :root[data-theme="light"] {
+    --bg:       #F0F4FA;
+    --surface:  #FFFFFF;
+    --surface2: #EEF2FB;
+    --border:   #D1D9EC;
+    --text:     #0D1526;
+    --muted:    #6B7A9E;
+    --accent:   #0284C7;
+    --accent-dim:#0369A1;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100dvh;
+    padding: 1.25rem 1rem 2rem;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.75rem;
+  }
+  .logo-mark {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+  }
+  .logo-mark svg { display: block; }
+  .header h1 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+  .header p {
+    font-size: 0.72rem;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-family: var(--mono);
+    margin-top: 1px;
+  }
+
+  /* ── Status orb ── */
+  .status-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+    text-align: center;
+  }
+  .orb-wrap {
+    position: relative;
+    width: 72px; height: 72px;
+  }
+  .orb {
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 2px solid var(--border);
+    display: grid;
+    place-items: center;
+    transition: background 0.4s, border-color 0.4s;
+    position: relative;
+    z-index: 1;
+  }
+  .orb svg { transition: opacity 0.3s; }
+  .orb.live { background: rgba(34,197,94,0.12); border-color: var(--green); }
+  .orb.error-state { background: rgba(239,68,68,0.12); border-color: var(--red); }
+
+  .pulse-ring {
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    border: 2px solid var(--green);
+    opacity: 0;
+    animation: none;
+  }
+  .orb.live ~ .pulse-ring {
+    animation: pulse 1.8s ease-out infinite;
+  }
+  @keyframes pulse {
+    0%   { transform: scale(1);   opacity: 0.6; }
+    100% { transform: scale(1.55);opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pulse-ring { animation: none !important; }
+  }
+
+  .status-label {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .status-label.live  { color: var(--green); }
+  .status-label.error-state { color: var(--red); }
+
+  .coords-display {
+    font-family: var(--mono);
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: -0.01em;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+    min-height: 2.8em;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .coords-display .dim { color: var(--muted); font-size: 0.8rem; }
+  .accuracy-badge {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: var(--surface2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .accuracy-badge.good { background: rgba(34,197,94,0.1); color: var(--green); border-color: rgba(34,197,94,0.3); }
+  .accuracy-badge.mid  { background: rgba(245,158,11,0.1); color: var(--amber); border-color: rgba(245,158,11,0.3); }
+  .accuracy-badge.poor { background: rgba(239,68,68,0.1);  color: var(--red);   border-color: rgba(239,68,68,0.3); }
+
+  /* ── Config ── */
+  .config-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+    margin-bottom: 1.25rem;
+  }
+  .field { display: flex; flex-direction: column; gap: 0.35rem; }
+  .field label {
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+  .field input {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.65rem 0.75rem;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+  .field input:focus { border-color: var(--accent); }
+  .field input:disabled { opacity: 0.45; cursor: not-allowed; }
+  .field input::placeholder { color: var(--muted); }
+  .hint { font-size: 0.68rem; color: var(--muted); margin-top: 0.1rem; }
+
+  /* ── Button ── */
+  .btn-track {
+    width: 100%;
+    padding: 1rem;
+    border-radius: 12px;
+    font-family: var(--sans);
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    border: none;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .btn-track:active { transform: scale(0.97); }
+  .btn-track.start {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-track.start:hover { background: #0284C7; }
+  .btn-track.stop {
+    background: rgba(239,68,68,0.12);
+    color: var(--red);
+    border: 1px solid rgba(239,68,68,0.35);
+  }
+  .btn-track.stop:hover { background: rgba(239,68,68,0.2); }
+
+  /* ── Stats grid ── */
+  .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.875rem 1rem;
+  }
+  .stat .label {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.3rem;
+  }
+  .stat .value {
+    font-family: var(--mono);
+    font-size: 1.35rem;
+    font-weight: 500;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .stat .value.accent { color: var(--accent); }
+  .stat .value.green  { color: var(--green); }
+  .stat .sub {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--muted);
+    margin-top: 0.25rem;
+  }
+
+  /* ── Log ── */
+  .log-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .log-header {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.7rem;
+    font-family: var(--mono);
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .log-clear {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.05em;
+    text-transform: uppercase; padding: 0;
+  }
+  .log-clear:hover { color: var(--text); }
+  .log-entries {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 0.5rem 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .log-entry {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    padding: 0.3rem 1rem;
+    display: flex;
+    gap: 0.6rem;
+    line-height: 1.4;
+    border-left: 2px solid transparent;
+  }
+  .log-entry.ok { border-color: var(--green); color: var(--text); }
+  .log-entry.err { border-color: var(--red); color: var(--red); }
+  .log-entry.info { border-color: var(--accent); color: var(--muted); }
+  .log-entry .ts { color: var(--muted); flex-shrink: 0; }
+  .log-empty { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); padding: 1rem; text-align: center; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="logo-mark">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="10" cy="8.5" r="3" stroke="white" stroke-width="1.75"/>
+      <path d="M10 2C6.96 2 4.5 4.46 4.5 7.5c0 4.5 5.5 10.5 5.5 10.5s5.5-6 5.5-10.5C15.5 4.46 13.04 2 10 2z" stroke="white" stroke-width="1.75" fill="none"/>
+    </svg>
+  </div>
+  <div>
+    <h1>GeoTag Tracker</h1>
+    <p>Live position sender</p>
+  </div>
+</div>
+
+<!-- Status -->
+<div class="status-card">
+  <div class="orb-wrap">
+    <div class="orb" id="orb">
+      <svg id="orb-icon-idle" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+      </svg>
+      <svg id="orb-icon-live" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+        <circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+      </svg>
+      <svg id="orb-icon-err" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+        <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/><circle cx="12" cy="12" r="10"/>
+      </svg>
+    </div>
+    <div class="pulse-ring" id="pulse"></div>
+  </div>
+
+  <span class="status-label" id="status-label">Idle</span>
+
+  <div class="coords-display" id="coords-display">
+    <span class="dim">— awaiting GPS —</span>
+  </div>
+
+  <span class="accuracy-badge" id="accuracy-badge" style="display:none"></span>
+</div>
+
+<!-- Config -->
+<div class="config-card">
+  <div class="field">
+    <label>Device ID</label>
+    <input id="inp-device" type="text" placeholder="e.g. android_kene_001" autocomplete="off" autocapitalize="none" spellcheck="false">
+    <span class="hint">Any unique string that identifies your phone</span>
+  </div>
+  <div class="field">
+    <label>Auth Token (JWT)</label>
+    <input id="inp-token" type="password" placeholder="Paste your Bearer token" autocomplete="off" spellcheck="false">
+    <span class="hint" id="token-hint">Auto-loaded from dashboard if you're on the same browser</span>
+  </div>
+  <div class="field">
+    <label>API URL</label>
+    <input id="inp-api" type="url" value="https://geotag-system-production.up.railway.app" autocomplete="off" spellcheck="false">
+  </div>
+</div>
+
+<!-- Start/Stop -->
+<button class="btn-track start" id="btn-track">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+  Start Tracking
+</button>
+
+<!-- Stats -->
+<div class="stats">
+  <div class="stat">
+    <div class="label">Pings Sent</div>
+    <div class="value accent" id="stat-pings">0</div>
+    <div class="sub">total</div>
+  </div>
+  <div class="stat">
+    <div class="label">Errors</div>
+    <div class="value" id="stat-errors">0</div>
+    <div class="sub">failed</div>
+  </div>
+  <div class="stat">
+    <div class="label">Last Ping</div>
+    <div class="value green" id="stat-last" style="font-size:0.85rem;margin-top:0.1rem">—</div>
+    <div class="sub" id="stat-last-sub"></div>
+  </div>
+  <div class="stat">
+    <div class="label">Battery</div>
+    <div class="value" id="stat-battery">—</div>
+    <div class="sub">%</div>
+  </div>
+</div>
+
+<!-- Log -->
+<div class="log-card">
+  <div class="log-header">
+    <span>Activity log</span>
+    <button class="log-clear" id="btn-clear-log">Clear</button>
+  </div>
+  <div class="log-entries" id="log-entries">
+    <div class="log-empty" id="log-empty">No activity yet</div>
+  </div>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+
+  // ── State ──
+  let watchId = null;
+  let pingCount = 0;
+  let errCount = 0;
+  let isLive = false;
+  let batteryLevel = null;
+
+  // ── Pre-fill token from localStorage ──
+  const savedToken = localStorage.getItem('geotag.jwt');
+  if (savedToken) {
+    $('inp-token').value = savedToken;
+    $('token-hint').textContent = 'Auto-loaded from your dashboard session';
+  }
+
+  // ── Battery API ──
+  if ('getBattery' in navigator) {
+    navigator.getBattery().then(b => {
+      batteryLevel = Math.round(b.level * 100);
+      b.addEventListener('levelchange', () => {
+        batteryLevel = Math.round(b.level * 100);
+        $('stat-battery').textContent = batteryLevel;
+      });
+      $('stat-battery').textContent = batteryLevel;
+    }).catch(() => {});
+  }
+
+  // ── Log ──
+  function addLog(type, msg) {
+    const empty = $('log-empty');
+    if (empty) empty.remove();
+    const el = document.createElement('div');
+    el.className = `log-entry ${type}`;
+    const now = new Date();
+    const ts = now.toTimeString().slice(0, 8);
+    el.innerHTML = `<span class="ts">${ts}</span><span>${msg}</span>`;
+    const container = $('log-entries');
+    container.appendChild(el);
+    container.scrollTop = container.scrollHeight;
+    // Keep last 50
+    const entries = container.querySelectorAll('.log-entry');
+    if (entries.length > 50) entries[0].remove();
+  }
+
+  $('btn-clear-log').addEventListener('click', () => {
+    const c = $('log-entries');
+    c.innerHTML = '<div class="log-empty" id="log-empty">No activity yet</div>';
+  });
+
+  // ── UI helpers ──
+  function setLive(live) {
+    isLive = live;
+    const orb = $('orb');
+    orb.className = 'orb' + (live ? ' live' : '');
+    $('orb-icon-idle').style.display = live ? 'none' : 'block';
+    $('orb-icon-live').style.display = live ? 'block' : 'none';
+    $('orb-icon-err').style.display  = 'none';
+    $('status-label').textContent = live ? 'Live' : 'Idle';
+    $('status-label').className = 'status-label' + (live ? ' live' : '');
+    const btn = $('btn-track');
+    if (live) {
+      btn.className = 'btn-track stop';
+      btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg> Stop Tracking`;
+    } else {
+      btn.className = 'btn-track start';
+      btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Tracking`;
+    }
+    ['inp-device','inp-token','inp-api'].forEach(id => $('btn-track').closest('body').querySelector('#'+id).disabled = live);
+  }
+
+  function setError(msg) {
+    const orb = $('orb');
+    orb.className = 'orb error-state';
+    $('orb-icon-idle').style.display = 'none';
+    $('orb-icon-live').style.display = 'none';
+    $('orb-icon-err').style.display  = 'block';
+    $('status-label').textContent = 'Error';
+    $('status-label').className = 'status-label error-state';
+    addLog('err', msg);
+  }
+
+  function updateCoords(lat, lng, acc) {
+    const fmtLat = (lat >= 0 ? '+' : '') + lat.toFixed(6);
+    const fmtLng = (lng >= 0 ? '+' : '') + lng.toFixed(6);
+    $('coords-display').innerHTML = `<span>${fmtLat}</span><span>${fmtLng}</span>`;
+
+    const badge = $('accuracy-badge');
+    badge.style.display = 'inline-block';
+    badge.textContent = `±${Math.round(acc)} m`;
+    badge.className = 'accuracy-badge ' + (acc <= 15 ? 'good' : acc <= 50 ? 'mid' : 'poor');
+  }
+
+  // ── POST ping ──
+  async function sendPing(lat, lng, acc, speed, bearing) {
+    const apiUrl  = $('inp-api').value.trim().replace(/\/$/, '');
+    const token   = $('inp-token').value.trim();
+    const device  = $('inp-device').value.trim();
+
+    if (!token || !device) return;
+
+    const payload = {
+      device_id: device,
+      lat, lng,
+      accuracy:  acc  ?? null,
+      speed:     (speed  != null && speed  >= 0) ? speed  : 0,
+      bearing:   (bearing != null && bearing >= 0) ? bearing : 0,
+      battery:   batteryLevel ?? null,
+      timestamp: Math.floor(Date.now() / 1000),
+    };
+
+    try {
+      const r = await fetch(`${apiUrl}/positions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload),
+      });
+      pingCount++;
+      $('stat-pings').textContent = pingCount;
+      const now = new Date();
+      $('stat-last').textContent = now.toTimeString().slice(0,8);
+      $('stat-last-sub').textContent = r.status === 201 ? 'ok' : `http ${r.status}`;
+      if (batteryLevel != null) $('stat-battery').textContent = batteryLevel;
+      if (r.status === 201) {
+        addLog('ok', `${lat.toFixed(5)}, ${lng.toFixed(5)}  ±${Math.round(acc)}m`);
+      } else {
+        const body = await r.text().catch(() => '');
+        addLog('err', `HTTP ${r.status} — ${body.slice(0,80)}`);
+        errCount++;
+        $('stat-errors').textContent = errCount;
+      }
+    } catch (e) {
+      errCount++;
+      $('stat-errors').textContent = errCount;
+      addLog('err', `Network error — ${e.message}`);
+    }
+  }
+
+  // ── Start / Stop ──
+  $('btn-track').addEventListener('click', () => {
+    if (isLive) {
+      stopTracking();
+    } else {
+      startTracking();
+    }
+  });
+
+  function startTracking() {
+    const device = $('inp-device').value.trim();
+    const token  = $('inp-token').value.trim();
+    if (!device) { addLog('err', 'Enter a Device ID first'); return; }
+    if (!token)  { addLog('err', 'Paste your auth token first'); return; }
+    if (!('geolocation' in navigator)) { setError('Geolocation not supported by this browser'); return; }
+
+    setLive(true);
+    addLog('info', `Started — device: ${device}`);
+
+    watchId = navigator.geolocation.watchPosition(
+      pos => {
+        const { latitude: lat, longitude: lng, accuracy: acc, speed, heading } = pos.coords;
+        updateCoords(lat, lng, acc);
+        sendPing(lat, lng, acc, speed, heading);
+      },
+      err => {
+        const msgs = { 1: 'Permission denied — allow location access', 2: 'Position unavailable', 3: 'Location timed out' };
+        setError(msgs[err.code] || err.message);
+        stopTracking(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  }
+
+  function stopTracking(updateUI = true) {
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+    if (updateUI) {
+      setLive(false);
+      addLog('info', 'Stopped');
+    }
+  }
+</script>
+</body>
+</html>
