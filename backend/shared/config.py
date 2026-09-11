@@ -58,6 +58,10 @@ def redis_port() -> int:
     return env_int("REDIS_PORT", 6379)
 
 
+def redis_tls() -> bool:
+    return (env("REDIS_TLS", "false") or "false").lower() in ("true", "1", "yes")
+
+
 # --- Domain constants -------------------------------------------------------
 
 ACTIVE_WINDOW_SECONDS = 3600      # CLAUDE.md: "devices seen in the last hour"

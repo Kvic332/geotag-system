@@ -49,6 +49,7 @@ def get_client() -> redis.Redis:
                     db=config.env_int("REDIS_DB", 0),
                     password=config.env("REDIS_PASSWORD"),
                     decode_responses=True,
+                    ssl=config.redis_tls(),
                     socket_connect_timeout=float(config.env_int("REDIS_CONNECT_TIMEOUT_MS", 500)) / 1000.0,
                     socket_timeout=float(config.env_int("REDIS_SOCKET_TIMEOUT_MS", 1000)) / 1000.0,
                     retry_on_timeout=False,
