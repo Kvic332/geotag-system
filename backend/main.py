@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 from position_tracker.handler import lambda_handler as _position
 from geofence_manager.handler import lambda_handler as _geofence
 from event_processor.handler import lambda_handler as _event
+from residence_detector.handler import lambda_handler as _residence
 
 app = FastAPI(title="GeoTag API", version="1.0.0")
 
@@ -125,3 +126,12 @@ async def delete_geofence(geofence_id: str, request: Request) -> JSONResponse:
 @app.get("/events")
 async def list_events(request: Request) -> JSONResponse:
     return _to_response(_event(await _build_event(request), None))
+
+
+# ---------------------------------------------------------------------------
+# Residence detection
+# ---------------------------------------------------------------------------
+
+@app.get("/devices/{device_id}/residence")
+async def get_residence(device_id: str, request: Request) -> JSONResponse:
+    return _to_response(_residence(await _build_event(request, {"device_id": device_id}), None))

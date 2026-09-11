@@ -5,6 +5,7 @@ import GeofenceEditor from './components/GeofenceEditor.jsx';
 import EventLog from './components/EventLog.jsx';
 import TokenBar from './components/TokenBar.jsx';
 import IntegrityPanel from './components/IntegrityPanel.jsx';
+import ResidenceAnalysis from './components/ResidenceAnalysis.jsx';
 import { API_URL, USE_FIXTURES, makeError, toApiError } from './api/client.js';
 import { hasToken } from './api/token.js';
 import { getActivePositions, getPositionHistory } from './api/positions.js';
@@ -178,6 +179,7 @@ export default function App() {
             positions={history.positions}
             loading={history.loading}
           />
+          <ResidenceAnalysis deviceId={selectedDeviceId} />
         </div>
 
         <div className="col col--map">
