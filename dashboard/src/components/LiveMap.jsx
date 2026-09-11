@@ -27,12 +27,18 @@ async function reverseGeocode(lat, lng) {
     );
     const data = await res.json();
     const a = data.address ?? {};
-    const parts = [
+    // Build from structured fields first; fall back to the first 4 tokens
+    // of display_name so sparse-OSM areas (e.g. Lagos suburbs) still show
+    // something useful like "Festac Town, Amuwo Odofin, Lagos".
+    const structured = [
       a.road || a.pedestrian || a.footway || a.path,
       a.suburb || a.neighbourhood || a.quarter || a.village,
-      a.city || a.town || a.county,
+      a.city_district || a.county,
+      a.city || a.town || a.state,
     ].filter(Boolean);
-    const address = parts.length ? parts.join(', ') : (data.display_name ?? null);
+    const address = structured.length >= 2
+      ? structured.join(', ')
+      : (data.display_name ? data.display_name.split(',').slice(0, 4).join(',').trim() : null);
     geocodeCache.set(key, address);
     return address;
   } catch {
