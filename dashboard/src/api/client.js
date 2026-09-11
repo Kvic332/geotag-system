@@ -14,7 +14,7 @@ export const USE_FIXTURES = String(import.meta.env.VITE_USE_FIXTURES || '').toLo
 
 export const http = axios.create({
   baseURL: API_URL,
-  timeout: 10000,
+  timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
 });
 
