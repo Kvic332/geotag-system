@@ -24,7 +24,7 @@ import logging
 
 from shared.apigw import Router
 from shared.auth import require_auth
-from shared.db import db
+from shared.db import query_one
 from shared.responses import api_handler, json_response
 
 logger = logging.getLogger(__name__)
@@ -78,7 +78,7 @@ def get_residence(event, _context):
     auth = require_auth(event)
     device_id = (event.get("pathParameters") or {}).get("device_id", "")
 
-    row = db.query_one(_SQL, {"tenant_id": auth.tenant_id, "device_id": device_id})
+    row = query_one(_SQL, {"tenant_id": auth.tenant_id, "device_id": device_id})
 
     if row is None:
         return json_response(404, {"error": {
