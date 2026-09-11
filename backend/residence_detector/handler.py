@@ -76,9 +76,9 @@ LIMIT 1
 
 
 @router.route("GET", "/devices/{device_id}/residence")
-def get_residence(event, _context):
+def get_residence(event, params):
     auth = require_auth(event)
-    device_id = (event.get("pathParameters") or {}).get("device_id", "")
+    device_id = params.get("device_id", "")
 
     row = query_one(_SQL, (auth.tenant_id, device_id))
 
@@ -101,4 +101,4 @@ def get_residence(event, _context):
 
 @api_handler(logger)
 def lambda_handler(event, context):
-    return router.dispatch(event, context)
+    return router.dispatch(event)
