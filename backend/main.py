@@ -23,6 +23,7 @@ from position_tracker.handler import lambda_handler as _position
 from geofence_manager.handler import lambda_handler as _geofence
 from event_processor.handler import lambda_handler as _event
 from residence_detector.handler import lambda_handler as _residence
+from intelligence_engine.handler import lambda_handler as _intelligence
 
 app = FastAPI(title="GeoTag API", version="1.0.0")
 
@@ -135,3 +136,17 @@ async def list_events(request: Request) -> JSONResponse:
 @app.get("/devices/{device_id}/residence")
 async def get_residence(device_id: str, request: Request) -> JSONResponse:
     return _to_response(_residence(await _build_event(request, {"device_id": device_id}), None))
+
+
+# ---------------------------------------------------------------------------
+# Intelligence (AI analysis)
+# ---------------------------------------------------------------------------
+
+@app.get("/devices/{device_id}/intelligence")
+async def get_intelligence(device_id: str, request: Request) -> JSONResponse:
+    return _to_response(_intelligence(await _build_event(request, {"device_id": device_id}), None))
+
+
+@app.post("/devices/{device_id}/intelligence/generate")
+async def generate_intelligence(device_id: str, request: Request) -> JSONResponse:
+    return _to_response(_intelligence(await _build_event(request, {"device_id": device_id}), None))

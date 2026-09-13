@@ -22,3 +22,4 @@ redis==8.1.0
 PyJWT[crypto]==2.13.0
 fastapi==0.115.12
 uvicorn[standard]==0.34.3
+anthropic==0.54.0
