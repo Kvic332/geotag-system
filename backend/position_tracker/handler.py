@@ -212,6 +212,7 @@ def get_active(event: dict[str, Any], _params: dict[str, str]) -> dict[str, Any]
                     "device_id": device_id,
                     "lat": _num_or_none(hash_.get("lat")),
                     "lng": _num_or_none(hash_.get("lng")),
+                    "speed": _num_or_none(hash_.get("speed")),
                     "battery": _int_or_none(hash_.get("battery")),
                     "recorded_at": to_iso(datetime.fromtimestamp(int(hash_["ts"]), tz=timezone.utc)),
                 }
@@ -223,7 +224,7 @@ def get_active(event: dict[str, Any], _params: dict[str, str]) -> dict[str, Any]
     rows = query_all(
         """
         SELECT DISTINCT ON (device_id) device_id, ST_Y(location::geometry) AS lat,
-               ST_X(location::geometry) AS lng, battery, recorded_at
+               ST_X(location::geometry) AS lng, speed, battery, recorded_at
           FROM positions
          WHERE tenant_id = %s AND recorded_at >= %s
          ORDER BY device_id, recorded_at DESC
@@ -236,6 +237,7 @@ def get_active(event: dict[str, Any], _params: dict[str, str]) -> dict[str, Any]
             "device_id": row["device_id"],
             "lat": row["lat"],
             "lng": row["lng"],
+            "speed": row["speed"],
             "battery": row["battery"],
             "recorded_at": to_iso(row["recorded_at"]),
         }

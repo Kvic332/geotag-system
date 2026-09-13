@@ -42,6 +42,7 @@ function formatDistance(metres) {
 export default function ResidenceAnalysis({ deviceId }) {
   const [state, setState] = useState({ loading: false, error: null, data: null });
   const [detectedAddress, setDetectedAddress] = useState(null);
+  const [addressLoading, setAddressLoading] = useState(false);
   const [statedAddress, setStatedAddress] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState(null);
@@ -61,6 +62,7 @@ export default function ResidenceAnalysis({ deviceId }) {
 
     setState({ loading: true, error: null, data: null });
     setDetectedAddress(null);
+    setAddressLoading(false);
     setStatedAddress('');
     setVerifyResult(null);
 
@@ -69,9 +71,15 @@ export default function ResidenceAnalysis({ deviceId }) {
       .then((data) => {
         if (cancelled) return;
         setState({ loading: false, error: null, data });
-        reverseGeocode(data.cluster_lat, data.cluster_lng).then((addr) => {
-          if (!cancelled) setDetectedAddress(addr);
-        });
+        if (OPENCAGE_KEY) {
+          setAddressLoading(true);
+          reverseGeocode(data.cluster_lat, data.cluster_lng).then((addr) => {
+            if (!cancelled) {
+              setDetectedAddress(addr);
+              setAddressLoading(false);
+            }
+          });
+        }
       })
       .catch((err) => {
         if (cancelled) return;
@@ -128,8 +136,25 @@ export default function ResidenceAnalysis({ deviceId }) {
 
       <div className="residence-summary">
         <div className="residence-location">
-          <span className="residence-coords">{formatCoord(cluster_lat)}, {formatCoord(cluster_lng)}</span>
-          {detectedAddress && <span className="residence-address">{detectedAddress}</span>}
+          {addressLoading && (
+            <span className="residence-address residence-address--loading">Looking up address…</span>
+          )}
+          {!addressLoading && detectedAddress && (
+            <span className="residence-address">{detectedAddress}</span>
+          )}
+          {!addressLoading && !detectedAddress && (
+            <span className="residence-coords">{formatCoord(cluster_lat)}, {formatCoord(cluster_lng)}</span>
+          )}
+          {detectedAddress && (
+            <a
+              className="residence-coords residence-map-link"
+              href={`https://maps.google.com/?q=${cluster_lat},${cluster_lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {formatCoord(cluster_lat)}, {formatCoord(cluster_lng)} ↗
+            </a>
+          )}
         </div>
         <div className="residence-stats">
           <span className={`badge ${confidenceClass}`}>{confidence_pct}% confidence</span>

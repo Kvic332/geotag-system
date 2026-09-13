@@ -80,6 +80,22 @@ export function isStale(recordedAt, now = Date.now()) {
   return now - date.getTime() > STALE_AFTER_MS;
 }
 
+/**
+ * Classify device motion from its last known speed (m/s) and ping time.
+ * Returns null if the device is stale (> 5 min since last ping) — no badge shown.
+ * Thresholds: <0.5 m/s = stationary, <2 = walking, <6 = cycling, else driving.
+ */
+export function classifyBehavior(speedMps, recordedAt, now = Date.now()) {
+  if (isStale(recordedAt, now)) return null;
+  if (speedMps === null || speedMps === undefined) return { label: 'Unknown', cls: 'behavior--unknown' };
+  const mps = Number(speedMps);
+  if (!Number.isFinite(mps)) return null;
+  if (mps < 0.5) return { label: 'Stationary', cls: 'behavior--stationary' };
+  if (mps < 2.0) return { label: 'Walking', cls: 'behavior--walking' };
+  if (mps < 6.0) return { label: 'Cycling', cls: 'behavior--cycling' };
+  return { label: 'Driving', cls: 'behavior--driving' };
+}
+
 /** Human copy for a normalised API error, tuned per contract error code. */
 export function describeApiError(error) {
   if (!error) return null;

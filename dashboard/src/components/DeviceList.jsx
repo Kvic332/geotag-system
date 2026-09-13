@@ -1,5 +1,6 @@
 import {
   batteryClass,
+  classifyBehavior,
   describeApiError,
   formatCoord,
   fullTimestamp,
@@ -58,6 +59,7 @@ export default function DeviceList({
         {devices.map((device) => {
           const selected = device.device_id === selectedDeviceId;
           const stale = isStale(device.recorded_at);
+          const behavior = classifyBehavior(device.speed, device.recorded_at);
           return (
             <li key={device.device_id}>
               <button
@@ -86,6 +88,11 @@ export default function DeviceList({
                   <span className={stale ? 'seen seen--stale' : 'seen'} title={fullTimestamp(device.recorded_at)}>
                     <i className="dot" /> {relativeTime(device.recorded_at)}
                   </span>
+                  {behavior && (
+                    <span className={`behavior-badge ${behavior.cls}`}>{behavior.label}</span>
+                  )}
+                </span>
+                <span className="device-row__meta device-row__meta--coords">
                   <span className="coords">
                     {formatCoord(device.lat)}, {formatCoord(device.lng)}
                   </span>

@@ -551,6 +551,46 @@ code {
   color: var(--warn);
 }
 
+/* ---------- behavior classification badge ---------- */
+
+.behavior-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.behavior--stationary {
+  background: #f1f5f9;
+  color: var(--ink-faint);
+}
+
+.behavior--walking {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.behavior--cycling {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.behavior--driving {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.behavior--unknown {
+  background: #f1f5f9;
+  color: var(--ink-faint);
+}
+
+.device-row__meta--coords {
+  margin-top: 1px;
+}
+
 .battery {
   display: inline-flex;
   align-items: center;
@@ -1109,15 +1149,38 @@ code {
 }
 
 .residence-coords {
-  font-size: 12px;
+  font-size: 11px;
   font-family: monospace;
-  color: var(--ink);
+  color: var(--ink-faint);
+}
+
+.residence-map-link {
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.residence-map-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
 }
 
 .residence-address {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.3;
+}
+
+.residence-address--loading {
   font-size: 12px;
-  color: var(--ink-soft);
+  font-weight: 400;
+  color: var(--ink-faint);
   font-style: italic;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 .residence-stats {
