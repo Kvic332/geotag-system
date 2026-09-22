@@ -19,15 +19,30 @@ const geocodeCache = new Map();
 const OPENCAGE_KEY = import.meta.env.VITE_OPENCAGE_KEY;
 
 async function reverseGeocode(lat, lng) {
-  const cacheKey = `${Number(lat).toFixed(4)},${Number(lng).toFixed(4)}`;
+  const cacheKey = `${Number(lat).toFixed(5)},${Number(lng).toFixed(5)}`;
   if (geocodeCache.has(cacheKey)) return geocodeCache.get(cacheKey);
   if (!OPENCAGE_KEY) return null;
   try {
     const res = await fetch(
-      `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${OPENCAGE_KEY}&limit=1&no_annotations=1`
+      `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${OPENCAGE_KEY}&limit=1&no_annotations=1&no_record=1`
     );
     const data = await res.json();
-    const address = data.results?.[0]?.formatted ?? null;
+    const result = data.results?.[0];
+    if (!result) { geocodeCache.set(cacheKey, null); return null; }
+    const c = result.components || {};
+    // Build the most precise address possible from components
+    const houseNumber = c.house_number || c.street_number || '';
+    const road = c.road || c.street || c.pedestrian || '';
+    const suburb = c.suburb || c.neighbourhood || c.quarter || '';
+    const city = c.city || c.town || c.village || c.county || '';
+    const state = c.state || '';
+    const parts = [
+      houseNumber && road ? `${houseNumber} ${road}` : road,
+      suburb !== road ? suburb : '',
+      city,
+      state,
+    ].filter(Boolean);
+    const address = parts.length >= 2 ? parts.join(', ') : (result.formatted ?? null);
     geocodeCache.set(cacheKey, address);
     return address;
   } catch {
