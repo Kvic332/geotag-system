@@ -42,7 +42,6 @@ WITH clustered AS (
         recorded_at
     FROM positions
     WHERE tenant_id = %s AND device_id = %s
-      AND recorded_at >= NOW() - INTERVAL '14 days'
       AND (
           EXTRACT(HOUR FROM (recorded_at + INTERVAL '1 hour')) >= 22
           OR EXTRACT(HOUR FROM (recorded_at + INTERVAL '1 hour')) < 6
@@ -67,7 +66,6 @@ _SQL_TOP_GEOFENCES = """
 SELECT geofence_name, event_type, COUNT(*) AS cnt
   FROM device_events
  WHERE tenant_id = %s AND device_id = %s
-   AND recorded_at >= NOW() - INTERVAL '14 days'
    AND geofence_name IS NOT NULL AND geofence_name != ''
  GROUP BY geofence_name, event_type
  ORDER BY cnt DESC
@@ -80,7 +78,6 @@ SELECT
     COUNT(*) AS cnt
   FROM positions
  WHERE tenant_id = %s AND device_id = %s
-   AND recorded_at >= NOW() - INTERVAL '14 days'
  GROUP BY hour_wat
  ORDER BY hour_wat
 """
@@ -91,7 +88,6 @@ SELECT
     COUNT(*) AS cnt
   FROM positions
  WHERE tenant_id = %s AND device_id = %s
-   AND recorded_at >= NOW() - INTERVAL '14 days'
  GROUP BY dow
  ORDER BY dow
 """
@@ -101,10 +97,11 @@ SELECT
     COUNT(*)                                      AS total_pings,
     ROUND(AVG(speed)::numeric, 2)                 AS avg_speed,
     ROUND(MAX(speed)::numeric, 2)                 AS max_speed,
-    COUNT(DISTINCT DATE(recorded_at + INTERVAL '1 hour')) AS active_days
+    COUNT(DISTINCT DATE(recorded_at + INTERVAL '1 hour')) AS active_days,
+    MIN(recorded_at)                              AS first_seen,
+    MAX(recorded_at)                              AS last_seen
   FROM positions
  WHERE tenant_id = %s AND device_id = %s
-   AND recorded_at >= NOW() - INTERVAL '14 days'
 """
 
 
@@ -117,8 +114,14 @@ _DOW_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", 
 
 def _build_prompt(device_id: str, cluster: dict | None, geofences: list[dict],
                   hour_dist: list[dict], day_dist: list[dict], stats: dict) -> str:
+    first_seen = stats.get("first_seen")
+    last_seen = stats.get("last_seen")
+    window_desc = (
+        f"from {first_seen.strftime('%Y-%m-%d') if first_seen else 'unknown'} "
+        f"to {last_seen.strftime('%Y-%m-%d') if last_seen else 'now'}"
+    )
     lines: list[str] = [
-        f"Analyze GPS tracking data for device '{device_id}' (last 14 days). "
+        f"Analyze ALL available GPS tracking data for device '{device_id}' ({window_desc}). "
         "Return ONLY a single valid JSON object with the exact fields shown below — no markdown, no explanation.",
         "",
         "=== DATA ===",
@@ -179,7 +182,7 @@ def _build_prompt(device_id: str, cluster: dict | None, geofences: list[dict],
     # Summary stats
     lines += [
         f"TOTAL PINGS: {stats.get('total_pings', 0)}",
-        f"ACTIVE DAYS IN WINDOW: {stats.get('active_days', 0)} / 14",
+        f"ACTIVE DAYS: {stats.get('active_days', 0)}",
         f"AVG SPEED: {stats.get('avg_speed') or 0} m/s  |  MAX SPEED: {stats.get('max_speed') or 0} m/s",
     ]
 
@@ -267,13 +270,12 @@ def generate_intelligence(event: dict[str, Any], params: dict[str, str]) -> dict
     auth = require_auth(event)
     device_id = params.get("device_id", "")
 
-    # Confirm this device has any data in the last 14 days
     exists = query_one(
-        "SELECT 1 FROM positions WHERE tenant_id = %s AND device_id = %s AND recorded_at >= NOW() - INTERVAL '14 days' LIMIT 1",
+        "SELECT 1 FROM positions WHERE tenant_id = %s AND device_id = %s LIMIT 1",
         (auth.tenant_id, device_id),
     )
     if exists is None:
-        raise NotFoundError(f"No position data for device '{device_id}' in the last 14 days.")
+        raise NotFoundError(f"No position data found for device '{device_id}'.")
 
     # Gather all data
     cluster = query_one(_SQL_NIGHT_CLUSTER, (auth.tenant_id, device_id))

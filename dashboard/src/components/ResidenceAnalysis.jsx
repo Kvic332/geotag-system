@@ -3,7 +3,7 @@ import { getResidence } from '../api/residence.js';
 import { toApiError } from '../api/client.js';
 import { formatCoord } from '../utils/format.js';
 
-const OPENCAGE_KEY = import.meta.env.VITE_OPENCAGE_KEY;
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 // Haversine distance in metres between two lat/lng pairs.
 function haversineMetres(lat1, lng1, lat2, lng2) {
@@ -18,20 +18,22 @@ function haversineMetres(lat1, lng1, lat2, lng2) {
 }
 
 async function geocodeAddress(text) {
-  if (!OPENCAGE_KEY || !text.trim()) return null;
-  const url = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(text)}&key=${OPENCAGE_KEY}&limit=1&no_annotations=1`;
+  if (!MAPBOX_TOKEN || !text.trim()) return null;
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(text)}.json?access_token=${MAPBOX_TOKEN}&types=address&limit=1&country=ng`;
   const res = await fetch(url);
   const data = await res.json();
-  const g = data.results?.[0]?.geometry;
-  return g ? { lat: g.lat, lng: g.lng, formatted: data.results[0].formatted } : null;
+  const feature = data.features?.[0];
+  if (!feature) return null;
+  const [lng, lat] = feature.center;
+  return { lat, lng, formatted: feature.place_name };
 }
 
 async function reverseGeocode(lat, lng) {
-  if (!OPENCAGE_KEY) return null;
-  const url = `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${OPENCAGE_KEY}&limit=1&no_annotations=1`;
+  if (!MAPBOX_TOKEN) return null;
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&types=address&limit=1&country=ng`;
   const res = await fetch(url);
   const data = await res.json();
-  return data.results?.[0]?.formatted ?? null;
+  return data.features?.[0]?.place_name ?? null;
 }
 
 function formatDistance(metres) {
@@ -71,7 +73,7 @@ export default function ResidenceAnalysis({ deviceId }) {
       .then((data) => {
         if (cancelled) return;
         setState({ loading: false, error: null, data });
-        if (OPENCAGE_KEY) {
+        if (MAPBOX_TOKEN) {
           setAddressLoading(true);
           reverseGeocode(data.cluster_lat, data.cluster_lng).then((addr) => {
             if (!cancelled) {
