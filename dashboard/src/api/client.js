@@ -61,7 +61,7 @@ export function toApiError(err) {
       }
     } else if (err.code === 'ECONNABORTED') {
       error.code = 'timeout';
-      error.message = `No response from ${API_URL} within 10s.`;
+      error.message = `No response from ${API_URL} within 30s.`;
     } else {
       error.code = 'network_error';
       error.message = `Cannot reach the API at ${API_URL}. Is the backend running?`;
