@@ -13,36 +13,37 @@ const TILE_ATTRIBUTION = '&copy; OpenStreetMap contributors';
 const FALLBACK_CENTER = [6.5244, 3.3792];
 const FALLBACK_ZOOM = 12;
 
-// Reverse-geocoding via OpenCage API. Free tier: 2,500 req/day, no billing required.
-// Cache by truncated coord so small GPS drift doesn't trigger duplicate requests.
+// Reverse-geocoding via Mapbox API. Free tier: 100,000 req/month, no credit card.
+// Cache by truncated coord (~1 m) so small GPS drift doesn't trigger duplicate requests.
 const geocodeCache = new Map();
-const OPENCAGE_KEY = import.meta.env.VITE_OPENCAGE_KEY;
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 async function reverseGeocode(lat, lng) {
   const cacheKey = `${Number(lat).toFixed(5)},${Number(lng).toFixed(5)}`;
   if (geocodeCache.has(cacheKey)) return geocodeCache.get(cacheKey);
-  if (!OPENCAGE_KEY) return null;
+  if (!MAPBOX_TOKEN) return null;
   try {
+    // Mapbox expects lng,lat order
     const res = await fetch(
-      `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${OPENCAGE_KEY}&limit=1&no_annotations=1&no_record=1`
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&types=address&limit=1&country=ng`
     );
     const data = await res.json();
-    const result = data.results?.[0];
-    if (!result) { geocodeCache.set(cacheKey, null); return null; }
-    const c = result.components || {};
-    // Build the most precise address possible from components
-    const houseNumber = c.house_number || c.street_number || '';
-    const road = c.road || c.street || c.pedestrian || '';
-    const suburb = c.suburb || c.neighbourhood || c.quarter || '';
-    const city = c.city || c.town || c.village || c.county || '';
-    const state = c.state || '';
+    const feature = data.features?.[0];
+    if (!feature) { geocodeCache.set(cacheKey, null); return null; }
+    // feature.address = house number, feature.text = road name
+    const houseNumber = feature.address || '';
+    const road = feature.text || '';
+    const ctx = feature.context || [];
+    const neighbourhood = ctx.find((c) => c.id?.startsWith('neighborhood') || c.id?.startsWith('locality'))?.text || '';
+    const city = ctx.find((c) => c.id?.startsWith('place'))?.text || '';
+    const state = ctx.find((c) => c.id?.startsWith('region'))?.text || '';
     const parts = [
-      houseNumber && road ? `${houseNumber} ${road}` : road,
-      suburb !== road ? suburb : '',
+      houseNumber ? `${houseNumber} ${road}` : road,
+      neighbourhood,
       city,
       state,
     ].filter(Boolean);
-    const address = parts.length >= 2 ? parts.join(', ') : (result.formatted ?? null);
+    const address = parts.length >= 2 ? parts.join(', ') : (feature.place_name ?? null);
     geocodeCache.set(cacheKey, address);
     return address;
   } catch {
