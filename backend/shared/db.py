@@ -27,18 +27,23 @@ _pool_lock = threading.Lock()
 def get_pool() -> psycopg2.pool.ThreadedConnectionPool:
     """Return (creating on first use) the process-wide connection pool."""
     global _pool
-    if _pool is None:
-        with _pool_lock:
-            if _pool is None:
-                dsn = config.database_url()
-                _pool = psycopg2.pool.ThreadedConnectionPool(
-                    minconn=config.env_int("DB_POOL_MIN", 1),
-                    maxconn=config.env_int("DB_POOL_MAX", 10),
-                    dsn=dsn,
-                    connect_timeout=config.env_int("DB_CONNECT_TIMEOUT", 10),
-                    application_name="geotag",
-                )
-                logger.info("db_pool_created")
+    if _pool is not None:
+        return _pool
+    # Connect outside the lock: holding it while an unreachable DB times out
+    # makes concurrent requests fail one after another (N x connect_timeout).
+    new_pool = psycopg2.pool.ThreadedConnectionPool(
+        minconn=config.env_int("DB_POOL_MIN", 1),
+        maxconn=config.env_int("DB_POOL_MAX", 10),
+        dsn=config.database_url(),
+        connect_timeout=config.env_int("DB_CONNECT_TIMEOUT", 10),
+        application_name="geotag",
+    )
+    with _pool_lock:
+        if _pool is None:
+            _pool = new_pool
+            logger.info("db_pool_created")
+            return _pool
+    new_pool.closeall()
     return _pool
 
 

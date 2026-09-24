@@ -12,11 +12,16 @@ Set ENVIRONMENT=local on Railway and supply a strong DEV_JWT_SECRET.
 from __future__ import annotations
 
 import json
-from typing import Any
+import time
+from typing import Any, Callable
 
+import psycopg2
 from fastapi import FastAPI, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+
+from shared import config
 
 # Import the three lambda_handlers (they wrap each router with @api_handler).
 from position_tracker.handler import lambda_handler as _position
@@ -63,13 +68,47 @@ def _to_response(result: dict[str, Any]) -> JSONResponse:
     return JSONResponse(content=content, status_code=result["statusCode"], headers=headers)
 
 
+async def _dispatch(
+    handler: Callable[[dict[str, Any], Any], dict[str, Any]],
+    request: Request,
+    path_params: dict[str, str] | None = None,
+) -> JSONResponse:
+    # Handlers do blocking psycopg2/redis I/O; running them on the event loop
+    # lets one slow DB call stall every other request, /health included.
+    event = await _build_event(request, path_params)
+    return _to_response(await run_in_threadpool(handler, event, None))
+
+
 # ---------------------------------------------------------------------------
-# Health check (no auth)
+# Health checks (no auth)
 # ---------------------------------------------------------------------------
 
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+def _probe_db() -> dict[str, Any]:
+    started = time.monotonic()
+    try:
+        conn = psycopg2.connect(config.database_url(), connect_timeout=10)
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+                cur.fetchone()
+        finally:
+            conn.close()
+    except psycopg2.Error as exc:
+        detail = (str(exc).strip().splitlines() or [""])[0]
+        return {"status": "error", "error": f"{type(exc).__name__}: {detail}",
+                "ms": round((time.monotonic() - started) * 1000)}
+    return {"status": "ok", "ms": round((time.monotonic() - started) * 1000)}
+
+
+@app.get("/health/db")
+async def health_db() -> JSONResponse:
+    result = await run_in_threadpool(_probe_db)
+    return JSONResponse(content=result, status_code=200 if result["status"] == "ok" else 503)
 
 
 # ---------------------------------------------------------------------------
@@ -78,22 +117,22 @@ async def health() -> dict[str, str]:
 
 @app.post("/positions")
 async def post_positions(request: Request) -> JSONResponse:
-    return _to_response(_position(await _build_event(request), None))
+    return await _dispatch(_position, request)
 
 
 @app.get("/positions/active")
 async def get_active(request: Request) -> JSONResponse:
-    return _to_response(_position(await _build_event(request), None))
+    return await _dispatch(_position, request)
 
 
 @app.get("/positions/{device_id}/history")
 async def get_history(device_id: str, request: Request) -> JSONResponse:
-    return _to_response(_position(await _build_event(request, {"device_id": device_id}), None))
+    return await _dispatch(_position, request, {"device_id": device_id})
 
 
 @app.get("/positions/{device_id}")
 async def get_position(device_id: str, request: Request) -> JSONResponse:
-    return _to_response(_position(await _build_event(request, {"device_id": device_id}), None))
+    return await _dispatch(_position, request, {"device_id": device_id})
 
 
 # ---------------------------------------------------------------------------
@@ -102,22 +141,22 @@ async def get_position(device_id: str, request: Request) -> JSONResponse:
 
 @app.get("/geofences")
 async def list_geofences(request: Request) -> JSONResponse:
-    return _to_response(_geofence(await _build_event(request), None))
+    return await _dispatch(_geofence, request)
 
 
 @app.post("/geofences")
 async def create_geofence(request: Request) -> JSONResponse:
-    return _to_response(_geofence(await _build_event(request), None))
+    return await _dispatch(_geofence, request)
 
 
 @app.put("/geofences/{geofence_id}")
 async def update_geofence(geofence_id: str, request: Request) -> JSONResponse:
-    return _to_response(_geofence(await _build_event(request, {"id": geofence_id}), None))
+    return await _dispatch(_geofence, request, {"id": geofence_id})
 
 
 @app.delete("/geofences/{geofence_id}")
 async def delete_geofence(geofence_id: str, request: Request) -> JSONResponse:
-    return _to_response(_geofence(await _build_event(request, {"id": geofence_id}), None))
+    return await _dispatch(_geofence, request, {"id": geofence_id})
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +165,7 @@ async def delete_geofence(geofence_id: str, request: Request) -> JSONResponse:
 
 @app.get("/events")
 async def list_events(request: Request) -> JSONResponse:
-    return _to_response(_event(await _build_event(request), None))
+    return await _dispatch(_event, request)
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +174,7 @@ async def list_events(request: Request) -> JSONResponse:
 
 @app.get("/devices/{device_id}/residence")
 async def get_residence(device_id: str, request: Request) -> JSONResponse:
-    return _to_response(_residence(await _build_event(request, {"device_id": device_id}), None))
+    return await _dispatch(_residence, request, {"device_id": device_id})
 
 
 # ---------------------------------------------------------------------------
@@ -144,9 +183,9 @@ async def get_residence(device_id: str, request: Request) -> JSONResponse:
 
 @app.get("/devices/{device_id}/intelligence")
 async def get_intelligence(device_id: str, request: Request) -> JSONResponse:
-    return _to_response(_intelligence(await _build_event(request, {"device_id": device_id}), None))
+    return await _dispatch(_intelligence, request, {"device_id": device_id})
 
 
 @app.post("/devices/{device_id}/intelligence/generate")
 async def generate_intelligence(device_id: str, request: Request) -> JSONResponse:
-    return _to_response(_intelligence(await _build_event(request, {"device_id": device_id}), None))
+    return await _dispatch(_intelligence, request, {"device_id": device_id})
