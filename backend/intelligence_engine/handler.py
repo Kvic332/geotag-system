@@ -4,11 +4,11 @@ Routes:
   GET  /devices/{device_id}/intelligence          — read cached analysis
   POST /devices/{device_id}/intelligence/generate — run fresh analysis via Claude
 
-The generate endpoint gathers 14 days of position + event data, builds a
-structured prompt, calls the Anthropic API, and upserts the result into
-device_intelligence. GET just reads the cached row — no AI cost on read.
+The generate endpoint gathers all position + event data for the device and
+upserts an analysis into device_intelligence. GET just reads the cached row.
 
-Requires ANTHROPIC_API_KEY environment variable on the server.
+With ANTHROPIC_API_KEY set the analysis is written by Claude; without it the
+built-in rule engine (local_analyzer) produces the same fields at no cost.
 """
 
 from __future__ import annotations
@@ -26,6 +26,8 @@ from shared.errors import InternalError, NotFoundError
 from shared.responses import api_handler, json_response
 from shared import config
 from shared.timeutil import to_iso, utcnow
+
+from intelligence_engine import local_analyzer
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -97,6 +99,49 @@ SELECT
  WHERE tenant_id = %s AND device_id = %s
  GROUP BY dow
  ORDER BY dow
+"""
+
+_SQL_DAY_CLUSTER = """
+WITH clustered AS (
+    SELECT
+        ROUND(ST_Y(location::geometry)::numeric, 3) AS cluster_lat,
+        ROUND(ST_X(location::geometry)::numeric, 3) AS cluster_lng
+    FROM positions
+    WHERE tenant_id = %s AND device_id = %s
+      AND EXTRACT(HOUR FROM (recorded_at + INTERVAL '1 hour')) BETWEEN 9 AND 16
+      AND EXTRACT(DOW FROM (recorded_at + INTERVAL '1 hour')) BETWEEN 1 AND 5
+),
+totals AS (
+    SELECT cluster_lat, cluster_lng, COUNT(*) AS day_pings
+    FROM clustered
+    GROUP BY cluster_lat, cluster_lng
+),
+total_count AS (SELECT COALESCE(SUM(day_pings), 0) AS total FROM totals)
+SELECT
+    t.cluster_lat, t.cluster_lng, t.day_pings,
+    tc.total AS total_day_pings,
+    ROUND(t.day_pings::numeric / NULLIF(tc.total, 0) * 100, 1) AS share_pct
+FROM totals t, total_count tc
+ORDER BY t.day_pings DESC
+LIMIT 1
+"""
+
+_SQL_SPREAD = """
+WITH cells AS (
+    SELECT
+        ROUND(ST_Y(location::geometry)::numeric, 3) AS cell_lat,
+        ROUND(ST_X(location::geometry)::numeric, 3) AS cell_lng,
+        COUNT(*) AS c
+    FROM positions
+    WHERE tenant_id = %s AND device_id = %s
+    GROUP BY 1, 2
+)
+SELECT
+    (SELECT COUNT(*) FROM cells WHERE c >= 2) AS places,
+    top.cell_lat AS top_lat,
+    top.cell_lng AS top_lng,
+    ROUND(top.c::numeric / NULLIF((SELECT SUM(c) FROM cells), 0) * 100, 1) AS top_share_pct
+FROM (SELECT * FROM cells ORDER BY c DESC LIMIT 1) top
 """
 
 _SQL_SUMMARY_STATS = """
@@ -311,11 +356,22 @@ def generate_intelligence(event: dict[str, Any], params: dict[str, str]) -> dict
     day_dist = query_all(_SQL_DAY_DIST, (auth.tenant_id, device_id))
     stats = query_one(_SQL_SUMMARY_STATS, (auth.tenant_id, device_id)) or {}
 
-    prompt = _build_prompt(device_id, cluster, geofences, hour_dist, day_dist, stats)
-
-    logger.info("intelligence_generate_start", extra={"device_id": device_id, "model": _MODEL})
-
-    result = _call_claude(prompt)
+    if config.env("ANTHROPIC_API_KEY"):
+        model_used = _MODEL
+        logger.info("intelligence_generate_start", extra={"device_id": device_id, "model": model_used})
+        result = _call_claude(_build_prompt(device_id, cluster, geofences, hour_dist, day_dist, stats))
+    else:
+        model_used = local_analyzer.ENGINE_NAME
+        logger.info("intelligence_generate_start", extra={"device_id": device_id, "model": model_used})
+        result = local_analyzer.analyze(
+            stats=stats,
+            night=cluster,
+            day=query_one(_SQL_DAY_CLUSTER, (auth.tenant_id, device_id)),
+            spread=query_one(_SQL_SPREAD, (auth.tenant_id, device_id)),
+            geofences=geofences,
+            hour_dist=hour_dist,
+            day_dist=day_dist,
+        )
 
     location_type = result.get("location_type", "unknown")
     home_area = result.get("home_area")
@@ -343,7 +399,7 @@ def generate_intelligence(event: dict[str, Any], params: dict[str, str]) -> dict
             """,
             (
                 auth.tenant_id, device_id, location_type, home_area,
-                summary, json.dumps(patterns), json.dumps(anomalies), confidence, _MODEL,
+                summary, json.dumps(patterns), json.dumps(anomalies), confidence, model_used,
             ),
         )
     except UndefinedTable:
@@ -360,7 +416,7 @@ def generate_intelligence(event: dict[str, Any], params: dict[str, str]) -> dict
         "patterns": patterns,
         "anomalies": anomalies,
         "confidence": confidence,
-        "model_used": _MODEL,
+        "model_used": model_used,
     })
 
 
