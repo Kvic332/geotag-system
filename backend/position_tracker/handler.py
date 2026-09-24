@@ -22,7 +22,7 @@ from typing import Any
 from shared import cache_keys, config
 from shared.apigw import Router, query_params, require_json_object
 from shared.auth import require_auth
-from shared.db import execute, query_all, query_one
+from shared.db import connection, execute, query_all, query_one
 from shared.errors import NotFoundError, ValidationError
 from shared.logging_utils import get_logger
 from shared.redis_client import redis_op, redis_pipeline
@@ -145,10 +145,13 @@ def post_positions(event: dict[str, Any], _params: dict[str, str]) -> dict[str, 
     # ping — the same handful of zones repeat across a batch in practice.
     meta_cache: dict[str, dict[str, Any]] = {}
     all_events: list[dict[str, Any]] = []
-    for _index, ping in parsed:
-        all_events.extend(
-            _batch_event_shape(e) for e in _process_one(ctx.tenant_id, ping, meta_cache)
-        )
+    # One transaction for the batch: a per-query BEGIN/COMMIT costs two extra
+    # round trips each, which made a 300-ping backlog outlast the SDK timeout.
+    with connection():
+        for _index, ping in parsed:
+            all_events.extend(
+                _batch_event_shape(e) for e in _process_one(ctx.tenant_id, ping, meta_cache)
+            )
 
     return json_response(
         201,
