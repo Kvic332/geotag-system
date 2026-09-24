@@ -22,6 +22,7 @@ logger = get_logger("geotag.db")
 
 _pool: psycopg2.pool.ThreadedConnectionPool | None = None
 _pool_lock = threading.Lock()
+_local = threading.local()
 
 
 def get_pool() -> psycopg2.pool.ThreadedConnectionPool:
@@ -58,9 +59,18 @@ def reset_pool() -> None:
 
 @contextmanager
 def connection() -> Iterator[Any]:
-    """Check a connection out of the pool; commit on success, rollback on error."""
+    """Check a connection out of the pool; commit on success, rollback on error.
+
+    Nested calls on the same thread join the outer transaction, so a caller can
+    wrap many queries in one BEGIN/COMMIT instead of paying for one per query.
+    """
+    outer = getattr(_local, "conn", None)
+    if outer is not None:
+        yield outer
+        return
     pool = get_pool()
     conn = pool.getconn()
+    _local.conn = conn
     try:
         yield conn
         conn.commit()
@@ -68,6 +78,7 @@ def connection() -> Iterator[Any]:
         conn.rollback()
         raise
     finally:
+        _local.conn = None
         pool.putconn(conn)
 
 

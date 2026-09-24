@@ -16,7 +16,9 @@ import time
 from typing import Any, Callable, TypeVar
 
 import redis
+from redis.backoff import NoBackoff
 from redis.client import Pipeline
+from redis.retry import Retry
 
 from shared import config
 from shared.logging_utils import get_logger
@@ -52,7 +54,9 @@ def get_client() -> redis.Redis:
                     ssl=config.redis_tls(),
                     socket_connect_timeout=float(config.env_int("REDIS_CONNECT_TIMEOUT_MS", 500)) / 1000.0,
                     socket_timeout=float(config.env_int("REDIS_SOCKET_TIMEOUT_MS", 1000)) / 1000.0,
-                    retry_on_timeout=False,
+                    # redis-py 6+ retries 10x with backoff by default (~4s per
+                    # failure even when refused); retry_on_timeout no longer stops it.
+                    retry=Retry(NoBackoff(), 0),
                     health_check_interval=0,
                 )
                 logger.info(
