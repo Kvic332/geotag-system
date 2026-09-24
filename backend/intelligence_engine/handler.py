@@ -17,10 +17,12 @@ import json
 import logging
 from typing import Any
 
+from psycopg2.errors import UndefinedTable
+
 from shared.apigw import Router
 from shared.auth import require_auth
 from shared.db import execute, query_all, query_one
-from shared.errors import NotFoundError
+from shared.errors import InternalError, NotFoundError
 from shared.responses import api_handler, json_response
 from shared import config
 from shared.timeutil import to_iso, utcnow
@@ -29,6 +31,11 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 _MODEL = "claude-haiku-4-5-20251001"
+
+_MISSING_TABLE = (
+    "The device_intelligence table does not exist. "
+    "Apply infra/migrations/003_intelligence.sql to the database."
+)
 
 # ---------------------------------------------------------------------------
 # Data-gathering SQL
@@ -209,16 +216,29 @@ def _build_prompt(device_id: str, cluster: dict | None, geofences: list[dict],
 def _call_claude(prompt: str) -> dict[str, Any]:
     api_key = config.env("ANTHROPIC_API_KEY")
     if not api_key:
-        raise ValueError("ANTHROPIC_API_KEY is not set")
+        raise InternalError("AI is not configured: ANTHROPIC_API_KEY is not set on the server.")
 
     import anthropic  # local import: keep optional for deployments that don't use intelligence
     client = anthropic.Anthropic(api_key=api_key)
 
-    message = client.messages.create(
-        model=_MODEL,
-        max_tokens=1024,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    try:
+        message = client.messages.create(
+            model=_MODEL,
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except anthropic.AuthenticationError:
+        raise InternalError("Anthropic rejected ANTHROPIC_API_KEY (401). Check the key on the server.") from None
+    except anthropic.PermissionDeniedError:
+        raise InternalError("ANTHROPIC_API_KEY lacks permission for this request (403).") from None
+    except anthropic.NotFoundError:
+        raise InternalError(f"Anthropic does not recognise model '{_MODEL}' (404).") from None
+    except anthropic.RateLimitError:
+        raise InternalError("Anthropic rate limit hit (429). Try again in a minute.") from None
+    except anthropic.APIStatusError as exc:
+        raise InternalError(f"Anthropic API error {exc.status_code}: {exc.message}") from None
+    except anthropic.APIConnectionError:
+        raise InternalError("Could not reach the Anthropic API from the server.") from None
 
     raw = message.content[0].text.strip()
 
@@ -229,7 +249,11 @@ def _call_claude(prompt: str) -> dict[str, Any]:
             raw = raw[4:]
         raw = raw.rsplit("```", 1)[0].strip()
 
-    return json.loads(raw)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("intelligence_bad_json", extra={"stop_reason": message.stop_reason, "raw": raw[:500]})
+        raise InternalError("The AI reply was not valid JSON. Try generating again.") from None
 
 
 # ---------------------------------------------------------------------------
@@ -241,10 +265,13 @@ def get_intelligence(event: dict[str, Any], params: dict[str, str]) -> dict[str,
     auth = require_auth(event)
     device_id = params.get("device_id", "")
 
-    row = query_one(
-        "SELECT * FROM device_intelligence WHERE tenant_id = %s AND device_id = %s",
-        (auth.tenant_id, device_id),
-    )
+    try:
+        row = query_one(
+            "SELECT * FROM device_intelligence WHERE tenant_id = %s AND device_id = %s",
+            (auth.tenant_id, device_id),
+        )
+    except UndefinedTable:
+        raise InternalError(_MISSING_TABLE) from None
 
     if row is None:
         return json_response(404, {"error": {
@@ -297,27 +324,30 @@ def generate_intelligence(event: dict[str, Any], params: dict[str, str]) -> dict
     anomalies = result.get("anomalies", [])
     confidence = result.get("confidence", "low")
 
-    execute(
-        """
-        INSERT INTO device_intelligence
-            (tenant_id, device_id, generated_at, location_type, home_area,
-             summary, patterns, anomalies, confidence, model_used)
-        VALUES (%s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (tenant_id, device_id) DO UPDATE SET
-            generated_at = EXCLUDED.generated_at,
-            location_type = EXCLUDED.location_type,
-            home_area = EXCLUDED.home_area,
-            summary = EXCLUDED.summary,
-            patterns = EXCLUDED.patterns,
-            anomalies = EXCLUDED.anomalies,
-            confidence = EXCLUDED.confidence,
-            model_used = EXCLUDED.model_used
-        """,
-        (
-            auth.tenant_id, device_id, location_type, home_area,
-            summary, json.dumps(patterns), json.dumps(anomalies), confidence, _MODEL,
-        ),
-    )
+    try:
+        execute(
+            """
+            INSERT INTO device_intelligence
+                (tenant_id, device_id, generated_at, location_type, home_area,
+                 summary, patterns, anomalies, confidence, model_used)
+            VALUES (%s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (tenant_id, device_id) DO UPDATE SET
+                generated_at = EXCLUDED.generated_at,
+                location_type = EXCLUDED.location_type,
+                home_area = EXCLUDED.home_area,
+                summary = EXCLUDED.summary,
+                patterns = EXCLUDED.patterns,
+                anomalies = EXCLUDED.anomalies,
+                confidence = EXCLUDED.confidence,
+                model_used = EXCLUDED.model_used
+            """,
+            (
+                auth.tenant_id, device_id, location_type, home_area,
+                summary, json.dumps(patterns), json.dumps(anomalies), confidence, _MODEL,
+            ),
+        )
+    except UndefinedTable:
+        raise InternalError(_MISSING_TABLE) from None
 
     logger.info("intelligence_generate_done", extra={"device_id": device_id, "location_type": location_type})
 
