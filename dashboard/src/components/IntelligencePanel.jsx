@@ -80,7 +80,7 @@ export default function IntelligencePanel({ deviceId }) {
       {!fetched && !generating && (
         <div className="intel-empty">
           <p className="panel-empty">
-            AI analysis reads 14 days of movement data and describes this device's
+            Analyses all recorded movement data and describes this device's
             daily routine, home area, and patterns in plain English.
           </p>
           <div className="intel-actions">
@@ -96,7 +96,7 @@ export default function IntelligencePanel({ deviceId }) {
 
       {generating && (
         <p className="panel-empty intel-generating">
-          <span className="intel-spinner" /> Analysing 14 days of movement data…
+          <span className="intel-spinner" /> Analysing movement data…
         </p>
       )}
 
