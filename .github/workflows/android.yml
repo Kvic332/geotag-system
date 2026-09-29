@@ -1,0 +1,71 @@
+name: Android build
+
+# Builds the demo app (APK) and the SDK library (AAR). On master, both are
+# published to the rolling "android-latest" release so testers get a fixed
+# download link:
+#   https://github.com/Kvic332/geotag-system/releases/download/android-latest/geotag-demo.apk
+
+on:
+  push:
+    branches: [master]
+    paths: ["android-sdk/**", ".github/workflows/android.yml"]
+  pull_request:
+    paths: ["android-sdk/**", ".github/workflows/android.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # The repo has no gradlew wrapper script, so pin Gradle to the version
+      # named in android-sdk/gradle/wrapper/gradle-wrapper.properties.
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Build demo APK and SDK AAR
+        working-directory: android-sdk
+        run: gradle --no-daemon --stacktrace :demo-app:assembleDebug :geotag-sdk:assembleRelease
+
+      - name: Collect outputs
+        run: |
+          mkdir -p out
+          cp android-sdk/demo-app/build/outputs/apk/debug/demo-app-debug.apk out/geotag-demo.apk
+          cp android-sdk/geotag-sdk/build/outputs/aar/geotag-sdk-release.aar out/geotag-sdk.aar
+          ls -l out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: geotag-android-${{ github.sha }}
+          path: out/*
+
+      - name: Publish "android-latest" release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete android-latest --cleanup-tag --yes || true
+          gh release create android-latest out/geotag-demo.apk out/geotag-sdk.aar \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Android demo app & SDK (latest build)" \
+            --notes "Built automatically from master at ${GITHUB_SHA::7}.
+
+          **Testers:** download geotag-demo.apk on an Android phone and install it. If an older GeoTag Demo is installed, uninstall it first — every build is signed with a fresh debug key.
+
+          **Developers:** geotag-sdk.aar is the SDK library; setup is in android-sdk/README.md."
